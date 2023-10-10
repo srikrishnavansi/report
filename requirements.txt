@@ -6,4 +6,4 @@ openai
 unstructured
 unstructured[local-inference]
 pinecone-client
-os
+os 
