@@ -1,28 +1,33 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-import inspect
-import textwrap
-
+from sentence_transformers import SentenceTransformer
+import pinecone
+import openai
 import streamlit as st
+model = SentenceTransformer('all-MiniLM-L6-v2')
+pinecone.init(api_key='915610aa-7cd4-44e6-9f2d-90d796ed9ca5', environment='gcp-starter')
+index = pinecone.Index('task')
 
+def find_match(input):
+    input_em = model.encode(input).tolist()
+    result = index.query(input_em, top_k=2, includeMetadata=True)   
+    return result['matches'][0]['metadata']['text']+"\n"+result['matches'][1]['metadata']['text']
 
-def show_code(demo):
-    """Showing the code of the demo."""
-    show_code = st.sidebar.checkbox("Show code", True)
-    if show_code:
-        # Showing the code of the demo.
-        st.markdown("## Code")
-        sourcelines, _ = inspect.getsourcelines(demo)
-        st.code(textwrap.dedent("".join(sourcelines[1:])))
+def query_refiner(conversation, query,key):
+    openai.api_key=key
+    response = openai.Completion.create(
+    model="text-davinci-003",
+    prompt=f"Given the following user query and conversation log, formulate a question that would be the most relevant to provide the user with an answer from a knowledge base.\n\nCONVERSATION LOG: \n{conversation}\n\nQuery: {query}\n\nRefined Query:",
+    temperature=0.7,
+    max_tokens=256,
+    top_p=1,
+    frequency_penalty=0,
+    presence_penalty=0
+    )
+    return response['choices'][0]['text']
+
+def get_conversation_string():
+    conversation_string = "Hello"
+    for i in range(len(st.session_state['responses'])-1):
+        
+        conversation_string += "Human: "+st.session_state['requests'][i] + "\n"
+        conversation_string += "Bot: "+ st.session_state['responses'][i+1] + "\n"
+    return conversation_string
